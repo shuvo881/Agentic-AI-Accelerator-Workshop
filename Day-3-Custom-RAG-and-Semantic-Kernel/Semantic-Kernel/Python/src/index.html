@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>San Francisco Weather</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: linear-gradient(135deg, #74b9ff, #0984e3); }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .weather-info { text-align: center; }
+        .temperature { font-size: 3em; color: #0984e3; margin: 10px 0; }
+        .description { font-size: 1.2em; color: #636e72; margin: 10px 0; }
+        .details { display: flex; justify-content: space-between; margin-top: 20px; }
+        .detail-item { text-align: center; }
+        button { background: #0984e3; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 10px; }
+        button:hover { background: #74b9ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>San Francisco Weather</h1>
+        <div class="weather-info">
+            <div class="temperature" id="temperature">Loading...</div>
+            <div class="description" id="description">Getting weather data...</div>
+            <div class="details">
+                <div class="detail-item">
+                    <strong>Humidity</strong>
+                    <div id="humidity">--%</div>
+                </div>
+                <div class="detail-item">
+                    <strong>Wind</strong>
+                    <div id="wind">-- mph</div>
+                </div>
+                <div class="detail-item">
+                    <strong>Feels Like</strong>
+                    <div id="feels-like">--°F</div>
+                </div>
+            </div>
+            <button onclick="updateWeather()">Refresh Weather</button>
+        </div>
+    </div>
+
+    <script>
+        // Mock weather data for San Francisco
+        const mockWeatherData = {
+            temperature: 68,
+            description: "Partly Cloudy",
+            humidity: 65,
+            windSpeed: 12,
+            feelsLike: 70
+        };
+
+        function updateWeather() {
+            // In a real app, this would fetch from a weather API
+            // For demo purposes, we're using mock data
+            document.getElementById('temperature').textContent = mockWeatherData.temperature + '°F';
+            document.getElementById('description').textContent = mockWeatherData.description;
+            document.getElementById('humidity').textContent = mockWeatherData.humidity + '%';
+            document.getElementById('wind').textContent = mockWeatherData.windSpeed + ' mph';
+            document.getElementById('feels-like').textContent = mockWeatherData.feelsLike + '°F';
+        }
+
+        // Load weather data when page loads
+        window.onload = function() {
+            updateWeather();
+        };
+    </script>
+</body>
+</html>
