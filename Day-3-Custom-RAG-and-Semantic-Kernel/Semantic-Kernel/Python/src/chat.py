@@ -1,5 +1,5 @@
 import asyncio
-import logging
+import logging, os
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, OpenAITextToImage
@@ -19,10 +19,24 @@ chat_history = ChatHistory()
 def initialize_kernel():
     #Challene 02 - Add Kernel
     kernel = Kernel()
+    
     #Challenge 02 - Chat Completion Service
+    #//Add Azure AI Foundry Chat Completion
+    chat_completion_service = AzureChatCompletion(
+        deployment_name=os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"],  
+        api_key=os.environ["AZURE_OPENAI_API_KEY"],
+        endpoint=os.environ["AZURE_OPENAI_ENDPOINT"], # Used to point to your service
+        # service_id="my-service-id", # Optional; for targeting specific services within Semantic Kernel
+    )
+    # Retrieve the chat completion service by id
+    # chat_completion_service = AzureChatCompletion(service_id="my-service-id")
+    
+    
     #Challenge 05 - Add Text Embedding service for semantic search
     #Challenge 07 - Add DALL-E image generation service
-    chat_completion_service = kernel.get_service(type=ChatCompletionClientBase)
+    # Retrieve the default inference settings
+    # chat_completion_service = kernel.get_service(type=ChatCompletionClientBase)
+    kernel.add_service(chat_completion_service)
     return kernel
 
 
