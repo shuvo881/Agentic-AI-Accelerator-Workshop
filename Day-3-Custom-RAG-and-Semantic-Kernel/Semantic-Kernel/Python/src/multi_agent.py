@@ -74,7 +74,7 @@ def extract_html_code(messages):
 def create_git_script():
     """Creates platform-specific Git deployment scripts."""
     if platform.system() == "Windows":
-        # Create Windows batch file
+        # Create Windows batch file (avoiding Unicode characters)
         script_content = '''@echo off
 echo Starting Git operations...
 
@@ -115,15 +115,19 @@ echo Pushing to GitHub...
 git push origin main
 
 if %errorlevel% equ 0 (
-    echo ✅ Successfully pushed to GitHub!
+    echo [SUCCESS] Successfully pushed to GitHub!
 ) else (
-    echo ❌ Failed to push to GitHub. Check your Git credentials and remote configuration.
+    echo [ERROR] Failed to push to GitHub. Check your Git credentials and remote configuration.
     exit /b 1
 )
 
 echo Git operations completed successfully!
 '''
         script_name = "push_to_github.bat"
+        
+        # Use UTF-8 encoding for Windows to handle any future Unicode characters
+        with open(script_name, "w", encoding="utf-8") as f:
+            f.write(script_content)
     else:
         # Create Unix/Linux bash script
         script_content = '''#!/bin/bash
@@ -179,15 +183,14 @@ fi
 echo "Git operations completed successfully!"
 '''
         script_name = "push_to_github.sh"
-    
-    with open(script_name, "w") as f:
-        f.write(script_content)
-    
-    # Make executable on Unix-like systems
-    if platform.system() != "Windows":
+        
+        with open(script_name, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        
+        # Make executable on Unix-like systems
         os.chmod(script_name, 0o755)
     
-    print(f"✅ Created {script_name} script for {platform.system()}")
+    print(f"Created {script_name} script for {platform.system()}")
     return script_name
 
 def push_to_github_direct():
@@ -195,11 +198,30 @@ def push_to_github_direct():
     try:
         print("🚀 Starting Git operations...")
         
+        # Ensure Git user is configured before proceeding
+        try:
+            result = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, timeout=10)
+            if not result.stdout.strip():
+                print("⚙️  Configuring Git user...")
+                subprocess.run(["git", "config", "user.name", "Multi-Agent System"], check=True, timeout=10)
+                
+            result = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True, timeout=10)
+            if not result.stdout.strip():
+                subprocess.run(["git", "config", "user.email", "multiagent@example.com"], check=True, timeout=10)
+        except subprocess.CalledProcessError:
+            print("⚠️  Could not configure Git user, trying global config...")
+            try:
+                subprocess.run(["git", "config", "--global", "user.name", "Multi-Agent System"], timeout=10)
+                subprocess.run(["git", "config", "--global", "user.email", "multiagent@example.com"], timeout=10)
+            except:
+                pass  # Continue anyway
+        
         # Check if we're in a git repository
         result = subprocess.run(["git", "status"], capture_output=True, text=True, timeout=10)
         if result.returncode != 0:
-            print("❌ Not in a Git repository. Please run 'git init' first.")
-            return False
+            print("📁 Initializing Git repository...")
+            subprocess.run(["git", "init"], check=True, timeout=10)
+            print("✅ Git repository initialized")
         
         # Check if index.html exists
         if not os.path.exists("index.html"):
@@ -228,9 +250,35 @@ def push_to_github_direct():
         )
         if result.returncode != 0:
             print(f"❌ Git commit failed: {result.stderr}")
-            return False
+            
+            # If it's still a user identity issue, try to fix it
+            if "Author identity unknown" in result.stderr or "unable to auto-detect email" in result.stderr:
+                print("🔧 Fixing Git user identity...")
+                try:
+                    subprocess.run(["git", "config", "--global", "user.name", "Multi-Agent System"], timeout=10)
+                    subprocess.run(["git", "config", "--global", "user.email", "multiagent@example.com"], timeout=10)
+                    
+                    # Try commit again
+                    result = subprocess.run(
+                        ["git", "commit", "-m", commit_message], 
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if result.returncode != 0:
+                        print(f"❌ Git commit still failed: {result.stderr}")
+                        return False
+                except:
+                    return False
+            else:
+                return False
         
         print(f"✅ Committed: {commit_message}")
+        
+        # Check if remote origin exists
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, timeout=10)
+        if result.returncode != 0:
+            print("⚠️  No remote 'origin' configured. Cannot push to GitHub.")
+            print("   Please run: git remote add origin <your-github-repo-url>")
+            return False
         
         # Push to remote
         print("🚀 Pushing to GitHub...")
@@ -258,9 +306,23 @@ def push_to_github_direct():
                     print(f"Output: {result.stdout.strip()}")
                 return True
             else:
-                print(f"❌ Failed to push to GitHub: {result.stderr}")
-                print(f"Output: {result.stdout}")
-                return False
+                # Try to push and set upstream
+                print("🔄 Trying to set upstream...")
+                result = subprocess.run(
+                    ["git", "push", "-u", "origin", "main"], 
+                    capture_output=True, text=True, timeout=60
+                )
+                
+                if result.returncode == 0:
+                    print("✅ Successfully pushed to GitHub with upstream!")
+                    if result.stdout:
+                        print(f"Output: {result.stdout.strip()}")
+                    return True
+                else:
+                    print(f"❌ Failed to push to GitHub: {result.stderr}")
+                    if result.stdout:
+                        print(f"Output: {result.stdout}")
+                    return False
                 
     except subprocess.TimeoutExpired:
         print("❌ Git operation timed out!")
@@ -301,7 +363,7 @@ def setup_git_environment():
     
     try:
         # Check if git is installed
-        subprocess.run(["git", "--version"], capture_output=True, check=True)
+        subprocess.run(["git", "--version"], capture_output=True, check=True, timeout=10)
         print("✅ Git is installed")
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("❌ Git is not installed or not in PATH")
@@ -309,33 +371,61 @@ def setup_git_environment():
     
     try:
         # Check if we're in a git repository
-        subprocess.run(["git", "status"], capture_output=True, check=True)
-        print("✅ In a Git repository")
+        result = subprocess.run(["git", "status"], capture_output=True, timeout=10)
+        if result.returncode != 0:
+            print("❌ Not in a Git repository. Initializing...")
+            subprocess.run(["git", "init"], check=True, timeout=10)
+            print("✅ Git repository initialized")
+        else:
+            print("✅ In a Git repository")
     except subprocess.CalledProcessError:
-        print("❌ Not in a Git repository. Run 'git init' first.")
+        print("❌ Failed to initialize Git repository")
         return False
     
     try:
-        # Check git configuration
-        result = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True)
-        if result.stdout.strip():
+        # Check and set git configuration
+        result = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, timeout=10)
+        if not result.stdout.strip():
+            print("⚠️  Git user.name not set. Setting default...")
+            subprocess.run(["git", "config", "user.name", "Multi-Agent System"], check=True, timeout=10)
+            print("✅ Set Git user.name: Multi-Agent System")
+        else:
             print(f"✅ Git user.name: {result.stdout.strip()}")
-        else:
-            print("⚠️  Git user.name not set. Run: git config --global user.name 'Your Name'")
             
-        result = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True)
-        if result.stdout.strip():
-            print(f"✅ Git user.email: {result.stdout.strip()}")
+        result = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True, timeout=10)
+        if not result.stdout.strip():
+            print("⚠️  Git user.email not set. Setting default...")
+            subprocess.run(["git", "config", "user.email", "multiagent@example.com"], check=True, timeout=10)
+            print("✅ Set Git user.email: multiagent@example.com")
         else:
-            print("⚠️  Git user.email not set. Run: git config --global user.email 'your.email@example.com'")
-    except subprocess.CalledProcessError:
-        print("⚠️  Could not check Git configuration")
+            print(f"✅ Git user.email: {result.stdout.strip()}")
+            
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  Could not configure Git user: {e}")
+        # Try to set minimal config for the operation to work
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "Multi-Agent System"], timeout=10)
+            subprocess.run(["git", "config", "--global", "user.email", "multiagent@example.com"], timeout=10)
+            print("✅ Set global Git configuration")
+        except:
+            print("❌ Failed to set Git configuration")
+            return False
     
-    print("\n📋 For non-interactive pushes, ensure you have:")
-    print("   1. SSH key configured with GitHub, OR")
-    print("   2. Personal Access Token configured, OR") 
-    print("   3. Git credential helper configured")
-    print("   4. Remote origin set up: git remote add origin <your-repo-url>")
+    # Check for remote origin
+    try:
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print(f"✅ Git remote origin: {result.stdout.strip()}")
+        else:
+            print("⚠️  No Git remote 'origin' configured")
+            print("   Run: git remote add origin <your-repo-url>")
+    except:
+        print("⚠️  Could not check Git remote")
+    
+    print("\n📋 For GitHub deployment, ensure you have:")
+    print("   1. GitHub repository created")
+    print("   2. Git remote configured: git remote add origin <repo-url>")
+    print("   3. Authentication set up (SSH key, token, or credential helper)")
     
     return True
 
